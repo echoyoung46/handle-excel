@@ -1,11 +1,12 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-cn">
 <head>
     <meta charset="UTF-8">
     <title>UHOT 面辅料信息处理</title>
     <script lang="javascript" src="dist/xlsx.core.min.js"></script>
     <script src="dist/cpexcel.js"></script>
     <script src="dist/ods.js"></script>
+    <script src="dist/clipboard.min.js"></script>
     <style>
       #drop{
         border:2px dashed #bbb;
@@ -14,19 +15,37 @@
         border-radius:5px;
         padding:25px;
         text-align:center;
-        font:20pt bold,"Vollkorn";color:#bbb
+        font:20pt bold,"Vollkorn";color:#bbb;
+        margin-top: 50px;
+        margin-bottom: 50px;
       }
       #result{
         border:2px dashed #ddd;
-        margin-top: 50px;
+        margin-top: 20px;
         padding: 10px;
+        max-height: 500px;
+        overflow: auto;
       }
     </style>
 </head>
 <body>
+<input type="radio" value="0" name="sheetType" checked>确认版
+<input type="radio" value="1" name="sheetType">调料
+
 <div id="drop">Drop an XLSX / XLSM / XLSB / ODS / XLS / XML file here to see sheet data</div>
+<button  class="btn" data-clipboard-action="copy" data-clipboard-target="#result">复制到剪贴板</button>
 <div id="result"></div>
 <script>
+    var clipboard = new Clipboard('.btn');
+
+    clipboard.on('success', function(e) {
+        console.log(e);
+    });
+
+    clipboard.on('error', function(e) {
+        console.log(e);
+    });
+    
     /* 固定文件路径 */
     // var url = "uhot.xlsx";
     // var oReq = new XMLHttpRequest();
@@ -53,7 +72,7 @@
     
     /* 拖拽上传文件 */
     var drop = document.getElementById('drop'),
-        result = document.getElementById('result');
+        $result = document.getElementById('result');
     function handleDrop(e) {
       e.stopPropagation();
       e.preventDefault();
@@ -68,7 +87,8 @@
           /* if binary string, read with type 'binary' */
           var workbook = XLSX.read(data, {type: 'binary'});
           
-          handleExcel(workbook);
+          var sheetType = document.querySelector('input[name="sheetType"]:checked').value;
+          handleExcel(workbook, sheetType);
 
           /* DO SOMETHING WITH workbook HERE */
         };
@@ -90,53 +110,222 @@
     //uhot逻辑代码
     var worksheet = null,
         currRow = 0,
-        idCell = 'F', colorCell = 'G', countCell = 'K';
         uhot = [];
+
+    
+
+    //供应商编号、供应商色号、uhot编号、UHOT色号、单件用量、下单量、实际采购量
+    var cellObj = [
+      [
+        {
+          title: '确认版',
+          rowStep: 2, //开始统计到起始行数的距离
+          designNo: 'D1', //设计款号
+          bulkNo: 'H1', //大货款号
+          material: 'D', //种类
+          provId: 'E', //供应商编号
+          provColor: 'F', //供应商色号
+          uhotId: 'G', //UHOT编号
+          uhotColor: 'H', //UHOT色号
+          singleAmount: 'J', //单件用量
+          orderAmount: 'L',  //下单量
+          purchaseAmount: 'M' //实际采购量
+        }
+      ],
+      [
+          {
+            title: '第一次',
+            rowStep: 0,
+            designNo: 'D1', //设计款号
+            bulkNo: 'H1', //大货款号
+            material: 'D', //种类
+            provId: 'E', //供应商编号
+            provColor: 'F', //供应商色号
+            uhotId: 'G', //UHOT编号
+            uhotColor: 'H', //UHOT色号
+            transferAmount: 'I', //调板数量
+            reactArrive: 'L', //实际回料
+            adjustPrice: 'N', //调版价
+            bulkPrice: 'O'  //大货单价
+          },
+          {
+            title: '第二次',
+            rowStep: 1,
+            designNo: 'D1', //设计款号
+            bulkNo: 'H1', //大货款号
+            material: 'D', //种类
+            provId: 'E', //供应商编号
+            provColor: 'F', //供应商色号
+            uhotId: 'G', //UHOT编号
+            uhotColor: 'H', //UHOT色号
+            transferAmount: 'I', //调板数量
+            reactArrive: 'L', //实际回料
+            adjustPrice: 'N', //调版价
+            bulkPrice: 'O'  //大货单价
+          },
+          {
+            title: '第三次',
+            designNo: 'D1', //设计款号
+            bulkNo: 'H1', //大货款号
+            material: 'D', //种类
+            provId: 'E', //供应商编号
+            provColor: 'F', //供应商色号
+            uhotId: 'G', //UHOT编号
+            uhotColor: 'H', //UHOT色号
+            transferAmount: 'I', //调板数量
+            reactArrive: 'L', //实际回料
+            adjustPrice: 'N', //调版价
+            bulkPrice: 'O'  //大货单价
+          }
+      ]
+    ];
+
     /**
      * 得到起始位置
      * _workbook 表格
      */
-    function handleExcel (_workbook){
+    function handleExcel (_workbook, _type){
         var sheet_name_list = _workbook.SheetNames;
+        var dataObj = cellObj[_type];
+        
         sheet_name_list.forEach(function(y) { /* iterate through sheets */
           worksheet = _workbook.Sheets[y];
-          for (z in worksheet) {
-            /* all keys that do not begin with "!" correspond to cell addresses */
-            if(z[0] === '!') continue;
-            if(worksheet[z].v == '确认版'){
-              var startRow = parseInt(z.replace(/[^0-9]/ig,"")) + 2;
-              currRow = startRow;
-              // console.log(y + "!" + z + "=" + JSON.stringify(worksheet[z].v));
-              getInfo(startRow);
+
+          for( var i = 0; i < dataObj.length; i++ ) {
+            
+            for (z in worksheet) {
+              /* all keys that do not begin with "!" correspond to cell addresses */
+              if(z[0] === '!') continue;
+              var content = worksheet[z].v;
+              
+              try{
+
+                if( worksheet[z].v.indexOf(dataObj[i].title) > -1 ){
+                  var startRow = parseInt(z.replace(/[^0-9]/ig,"")) + dataObj[i].rowStep;
+                  currRow = startRow;
+                  getInfo(startRow, dataObj[i], _type);
+                }
+
+              }catch(e){
+              }
             }
+
           }
         });
-        result.innerHTML = "";
-        console.log(result.innerHTML);
-        result.innerHTML = JSON.stringify(uhot);
+        $result.innerHTML = "";
+        $result.innerHTML = JSON.stringify(uhot);
     }
     
     
     
     /** 
-     * 取到所有编号、色号和下单量
+     * 取到所有需要的数据
      * _row 从第几行开始取
      */
-    function getInfo(_row) {
-      var cell = idCell + _row;
-      // var uhotId = JSON.stringify(worksheet[cell].v);
+    function getInfo(_row, _data, _type) {
+      var cell = _data.material + _row;
+      
       if( typeof worksheet[cell] != 'undefined' &&  worksheet[cell] != 'undefined' ){
-        uhot.push({
-          id: JSON.stringify(worksheet[cell].v),
-          color: JSON.stringify(worksheet[colorCell+_row].v),
-          count: JSON.stringify(worksheet[countCell+_row].v)
-        });
+        if( _type == 0 ){
+          
+          var obj = {
+            '设计款号': returnCell(worksheet[_data.designNo]),
+            '大货款号': returnCell(worksheet[_data.bulkNo]),
+            '供应商/编号': returnCell(worksheet[_data.provId+_row]),
+            '供颜色/色号': returnCell(worksheet[_data.provColor+_row]),
+            'UHOT编号': returnCell(worksheet[_data.uhotId+_row]),
+            'UHOT颜色/色号': returnCell(worksheet[_data.uhotColor+_row]),
+            '单件用量': returnCell(worksheet[_data.singleAmount+_row]),
+            '下单量': returnCell(worksheet[_data.orderAmount+_row]),
+            '实际采购量': returnCell(worksheet[_data.purchaseAmount+_row])
+          }
+         
+        }else if( _type == 1 ){
+          
+          var obj = {
+            '设计款号': returnCell(worksheet[_data.designNo]),
+            '大货款号': returnCell(worksheet[_data.bulkNo]),
+            '供应商/编号': returnCell(worksheet[_data.provId+_row]),
+            '供颜色/色号': returnCell(worksheet[_data.provColor+_row]),
+            'UHOT编号': returnCell(worksheet[_data.uhotId+_row]),
+            'UHOT颜色/色号': returnCell(worksheet[_data.uhotColor+_row]),
+            '调板数量': returnCell(worksheet[_data.transferAmount+_row]),
+            '实际回料': returnCell(worksheet[_data.reactArrive+_row]),
+            '调版价': returnCell(worksheet[_data.adjustPrice+_row]),
+            '大货单价': returnCell(worksheet[_data.bulkPrice+_row]),
+          }
+          
+        }
+        
+        uhot.push(obj);
+
         currRow++;
-        getInfo(currRow);
+        getInfo(currRow, _data, _type);
+
       }else{
+
         return false;
+
       }
     }
+
+    /**
+     * 判断单元格是否为空，为空显示'-'
+     * _cell 单元格
+     */
+    function returnCell(_cell) {
+      var result = '-';
+      
+      if( _cell ) {
+        result = JSON.stringify(_cell.v);
+      }
+      
+      return result;
+    }
+    
+            
+    /*function addTheSame(_list){
+      console.log(_list);
+      var returnList = [],
+          existList = [];
+
+      
+      for( var i = 0; i < _list.length; i++ ){
+        
+        var idColor = _list[i].id + '-' + _list[i].color;
+        console.log(idColor);
+
+        if(!existList.inArray(idColor)){
+          existList.push(idColor);
+        
+          for( var j = 1; j < _list.length; j++ ) {
+            if( _list[i].id == _list[j].id && _list[i].color == _list[j].color ){
+              
+              var newCount = parseInt(_list[i].count) + parseInt(_list[j].count);
+              // console.log(_list[i].id);
+              _list[i].count = newCount;
+            }
+          }
+
+          returnList.push(_list[i]);
+
+        }
+
+      }
+      return returnList;
+    }
+
+    Array.prototype.inArray = function( _val ) {
+      var result = false;
+
+      for( var i = 0; i < Array.length; i++ ){
+        if( Array[i] == _val ){
+          result = true;
+        }
+      }
+
+      return result;
+    }*/
     
 </script>    
 </body>
