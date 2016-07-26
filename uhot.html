@@ -165,6 +165,7 @@
           },
           {
             title: '第三次',
+            rowStep: 1,
             designNo: 'D1', //设计款号
             bulkNo: 'H1', //大货款号
             material: 'D', //种类
@@ -186,6 +187,7 @@
      */
     function handleExcel (_workbook, _type){
         var sheet_name_list = _workbook.SheetNames;
+        
         var dataObj = cellObj[_type];
         
         sheet_name_list.forEach(function(y) { /* iterate through sheets */
@@ -194,19 +196,22 @@
           for( var i = 0; i < dataObj.length; i++ ) {
             
             for (z in worksheet) {
+
               /* all keys that do not begin with "!" correspond to cell addresses */
               if(z[0] === '!') continue;
               var content = worksheet[z].v;
               
               try{
-
-                if( worksheet[z].v.indexOf(dataObj[i].title) > -1 ){
+                if( content.indexOf(dataObj[i].title) > -1 ){
+                  
                   var startRow = parseInt(z.replace(/[^0-9]/ig,"")) + dataObj[i].rowStep;
+                 
                   currRow = startRow;
                   getInfo(startRow, dataObj[i], _type);
                 }
 
               }catch(e){
+                
               }
             }
 
@@ -223,7 +228,7 @@
      * _row 从第几行开始取
      */
     function getInfo(_row, _data, _type) {
-      var cell = _data.material + _row;
+      var cell = _data.provId + _row;
       
       if( typeof worksheet[cell] != 'undefined' &&  worksheet[cell] != 'undefined' ){
         if( _type == 0 ){
@@ -257,8 +262,10 @@
           
         }
         
-        uhot.push(obj);
-
+        if( obj['供应商/编号'] != '-' ){
+          uhot.push(obj);
+        }
+        
         currRow++;
         getInfo(currRow, _data, _type);
 
